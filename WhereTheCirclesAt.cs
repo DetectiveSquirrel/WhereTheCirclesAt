@@ -47,10 +47,12 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
                 ImGui.DragInt("Width", ref doryMercSetting.Circle.Thickness);
                 ImGui.DragInt("Segments (high = bad)", ref doryMercSetting.Circle.Segments);
                 ImGui.Checkbox("Draw in World", ref doryMercSetting.Circle.World);
+                ImGui.Checkbox("World Filled Circle", ref doryMercSetting.Circle.WorldFilledCircle);
                 ImGui.Checkbox("World Follow Terrain", ref doryMercSetting.Circle.WorldFollowTerrain);
                 ImGui.Checkbox("Draw on Large Map", ref doryMercSetting.Circle.LargeMap);
+                ImGui.Checkbox("Large Map Filled Circle", ref doryMercSetting.Circle.LargeMapFilledCircle);
                 ImGui.Checkbox("Large Map Follow Terrain", ref doryMercSetting.Circle.LargeMapFollowTerrain);
-                ImGui.Checkbox("Large Map World Color", ref doryMercSetting.Circle.EnableLargeMapColor);
+                ImGui.Checkbox("Large Map Color For Both", ref doryMercSetting.Circle.EnableLargeMapColor);
                 doryMercSetting.Circle.LargeMapColor = ColorPicker("Active Large Map World Color", doryMercSetting.Circle.LargeMapColor);
                 doryMercSetting.Circle.GameWorldColor = ColorPicker("Active World Color", doryMercSetting.Circle.GameWorldColor);
 
@@ -73,10 +75,12 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
                     ImGui.DragInt("Width", ref item.Thickness);
                     ImGui.DragInt("Segments (high = bad)", ref item.Segments);
                     ImGui.Checkbox("Draw in World", ref item.World);
+                    ImGui.Checkbox("World Filled Circle", ref item.WorldFilledCircle);
                     ImGui.Checkbox("World Follow Terrain", ref item.WorldFollowTerrain);
                     ImGui.Checkbox("Draw on Large Map", ref item.LargeMap);
+                    ImGui.Checkbox("Large Map Filled Circle", ref item.LargeMapFilledCircle);
                     ImGui.Checkbox("Large Map Follow Terrain", ref item.LargeMapFollowTerrain);
-                    ImGui.Checkbox("Large Map World Color", ref item.EnableLargeMapColor);
+                    ImGui.Checkbox("Large Map Color For Both", ref item.EnableLargeMapColor);
                     item.LargeMapColor = ColorPicker("Active Large Map World Color", item.LargeMapColor);
                     item.GameWorldColor = ColorPicker("Active World Color", item.GameWorldColor);
 
@@ -99,7 +103,7 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
         var color = inputColor.ToVector4();
         var colorToVect4 = new Vector4N(color.X, color.Y, color.Z, color.W);
 
-        return ImGui.ColorEdit4(labelName, ref colorToVect4, ImGuiColorEditFlags.AlphaBar)
+        return ImGui.ColorEdit4(labelName, ref colorToVect4, ImGuiColorEditFlags.AlphaBar | ImGuiColorEditFlags.AlphaPreviewHalf)
             ? new Color(colorToVect4.X, colorToVect4.Y, colorToVect4.Z, colorToVect4.W)
             : inputColor;
     }
@@ -189,15 +193,27 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
                     ? doryaniMercCircle.LargeMapColor
                     : doryaniMercCircle.GameWorldColor;
 
-                Graphics.DrawCircleInWorld(
-                    InGameData.ToWorldWithTerrainHeight(_mercenaryEntity.PosNum), doryaniMercCircle.Size * 10, colorToUse, doryaniMercCircle.Thickness,
-                    doryaniMercCircle.Segments, doryaniMercCircle.WorldFollowTerrain);
+                if (doryaniMercCircle.WorldFilledCircle)
+                    Graphics.DrawFilledCircleInWorld(
+                        InGameData.ToWorldWithTerrainHeight(_mercenaryEntity.PosNum), doryaniMercCircle.Size * 10, colorToUse, doryaniMercCircle.Segments,
+                        doryaniMercCircle.WorldFollowTerrain);
+                else
+                    Graphics.DrawCircleInWorld(
+                        InGameData.ToWorldWithTerrainHeight(_mercenaryEntity.PosNum), doryaniMercCircle.Size * 10, colorToUse, doryaniMercCircle.Thickness,
+                        doryaniMercCircle.Segments, doryaniMercCircle.WorldFollowTerrain);
             }
 
             if (doryaniMercCircle.LargeMap && inGameUi.Map.LargeMap.IsVisible)
-                Graphics.DrawCircleOnLargeMap(
-                    _mercenaryEntity.GridPosNum, doryaniMercCircle.LargeMapFollowTerrain, doryaniMercCircle.Size, doryaniMercCircle.GameWorldColor,
-                    doryaniMercCircle.Thickness, doryaniMercCircle.Segments);
+            {
+                if (doryaniMercCircle.LargeMapFilledCircle)
+                    Graphics.DrawCircleOnLargeMap(
+                        _mercenaryEntity.GridPosNum, doryaniMercCircle.LargeMapFollowTerrain, doryaniMercCircle.Size, doryaniMercCircle.LargeMapColor,
+                        doryaniMercCircle.Thickness, doryaniMercCircle.Segments);
+                else
+                    Graphics.DrawFilledCircleOnLargeMap(
+                        _mercenaryEntity.GridPosNum, doryaniMercCircle.LargeMapFollowTerrain, doryaniMercCircle.Size, doryaniMercCircle.LargeMapColor,
+                        doryaniMercCircle.Segments);
+            }
         }
 
         foreach (var drawing in Settings.Circles)
@@ -206,12 +222,22 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
             {
                 var colorToUse = inGameUi.Map.LargeMap.IsVisible && drawing.EnableLargeMapColor ? drawing.LargeMapColor : drawing.GameWorldColor;
 
-                Graphics.DrawCircleInWorld(PlayerPos, drawing.Size * 10, colorToUse, drawing.Thickness, drawing.Segments, drawing.WorldFollowTerrain);
+                if (drawing.WorldFilledCircle)
+                    Graphics.DrawFilledCircleInWorld(PlayerPos, drawing.Size * 10, colorToUse, drawing.Segments, drawing.WorldFollowTerrain);
+                else
+                    Graphics.DrawCircleInWorld(PlayerPos, drawing.Size * 10, colorToUse, drawing.Thickness, drawing.Segments, drawing.WorldFollowTerrain);
             }
 
             if (drawing.LargeMap && inGameUi.Map.LargeMap.IsVisible)
-                Graphics.DrawCircleOnLargeMap(
-                    GameController.Player.GridPosNum, drawing.LargeMapFollowTerrain, drawing.Size, drawing.GameWorldColor, drawing.Thickness, drawing.Segments);
+            {
+                if (drawing.LargeMapFilledCircle)
+                    Graphics.DrawCircleOnLargeMap(
+                        GameController.Player.GridPosNum, drawing.LargeMapFollowTerrain, drawing.Size, drawing.LargeMapColor, drawing.Thickness,
+                        drawing.Segments);
+                else
+                    Graphics.DrawFilledCircleOnLargeMap(
+                        GameController.Player.GridPosNum, drawing.LargeMapFollowTerrain, drawing.Size, drawing.LargeMapColor, drawing.Segments);
+            }
         }
 
         ImGui.End();
