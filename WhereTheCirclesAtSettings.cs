@@ -19,17 +19,15 @@ public class WhereTheCirclesAtSettings : ISettings
 
     public class CircleData
     {
-        public string Name = "Rename Me";
-        public float Size = 100;
-        public int Thickness = 7;
+        public string Name = "Doryani Merc";
+        public float Size = 75;
+        public int Thickness = 5;
         public int Segments = 40;
         public bool LargeMap = false;
-        public bool LargeMapFollowTerrain = false;
         public bool EnableLargeMapColor = false;
-        public Color LargeMapColor = Color.White;
+        public Color LargeMapColor = Color.Yellow;
         public bool World = true;
-        public bool WorldFollowTerrain = false;
-        public Color GameWorldColor = Color.White;
+        public Color GameWorldColor = Color.Yellow;
     }
 }
 
@@ -37,7 +35,5 @@ public class WhereTheCirclesAtSettings : ISettings
 public class DoryaniMercSettings
 {
     public ToggleNode DrawDoryanisOnMerc { get; set; } = new(false);
-
-    public WhereTheCirclesAtSettings.CircleData Circle { get; set; } = new()
-        { Name = "Doryani Merc", Size = 75, Thickness = 5, LargeMapColor = Color.Yellow, GameWorldColor = Color.Yellow };
+    public WhereTheCirclesAtSettings.CircleData Circle { get; set; } = new WhereTheCirclesAtSettings.CircleData();
 }
