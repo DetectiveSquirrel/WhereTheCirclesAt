@@ -1,12 +1,15 @@
-﻿using ExileCore;
+﻿using System;
+using System.Linq;
+using System.Text.RegularExpressions;
+using ExileCore;
 using ExileCore.PoEMemory;
+using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Helpers;
 using ImGuiNET;
 using SharpDX;
-using System;
-using System.Linq;
 using static WhereTheCirclesAt.WhereTheCirclesAtSettings;
+using Vector2 = SharpDX.Vector2;
 using Vector2N = System.Numerics.Vector2;
 using Vector3N = System.Numerics.Vector3;
 using Vector4N = System.Numerics.Vector4;
@@ -16,6 +19,7 @@ namespace WhereTheCirclesAt;
 public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
 {
     private ImDrawListPtr _backGroundWindowPtr;
+    private Entity _mercenaryEntity = new();
     private RectangleF _rect;
 
     public WhereTheCirclesAt()
@@ -26,14 +30,39 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
     public Vector3N PlayerPos { get; set; }
     public IngameData InGameData { get; set; }
 
-    public override bool Initialise() => true;
+    public override bool Initialise()
+    {
+        return true;
+    }
 
     public override void DrawSettings()
     {
         base.DrawSettings();
+        var doryMercSetting = Settings.DoryaniMerc;
+        if (doryMercSetting.DrawDoryanisOnMerc)
+        {
+            ImGui.PushID("doryCircle_Settings");
+            if (ImGui.CollapsingHeader("", ImGuiTreeNodeFlags.Framed | ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                ImGui.Indent();
+                ImGui.InputText("Name", ref doryMercSetting.Circle.Name, 200);
+                ImGui.DragFloat("Closely Resembles in game distance", ref doryMercSetting.Circle.Size);
+                ImGui.DragInt("Width", ref doryMercSetting.Circle.Thickness);
+                ImGui.DragInt("Segments (high = bad)", ref doryMercSetting.Circle.Segments);
+                ImGui.Checkbox("Draw in World", ref doryMercSetting.Circle.World);
+                ImGui.Checkbox("Draw on Large Map", ref doryMercSetting.Circle.LargeMap);
+                ImGui.Checkbox("Large Map World Color", ref doryMercSetting.Circle.EnableLargeMapColor);
+                doryMercSetting.Circle.LargeMapColor = ColorPicker("Active Large Map World Color", doryMercSetting.Circle.LargeMapColor);
+                doryMercSetting.Circle.GameWorldColor = ColorPicker("Active World Color", doryMercSetting.Circle.GameWorldColor);
+
+                ImGui.Unindent();
+                ImGui.Separator();
+            }
+
+            ImGui.PopID();
+        }
 
         if (Settings.Circles.Count > 0)
-        {
             foreach (var (item, i) in Settings.Circles.Select((x, i) => (x, i)).ToList())
             {
                 ImGui.PushID($"{i}Settings");
@@ -51,21 +80,17 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
                     item.GameWorldColor = ColorPicker("Active World Color", item.GameWorldColor);
 
                     if (ImGui.Button("Delete"))
-                    {
                         Settings.Circles.RemoveAt(i);
-                    }
 
                     ImGui.Unindent();
                     ImGui.Separator();
                 }
+
                 ImGui.PopID();
             }
-        }
 
         if (ImGui.Button("New"))
-        {
             Settings.Circles.Add(new CircleData());
-        }
     }
 
     public static Color ColorPicker(string labelName, Color inputColor)
@@ -73,27 +98,36 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
         var color = inputColor.ToVector4();
         var colorToVect4 = new Vector4N(color.X, color.Y, color.Z, color.W);
 
-        return ImGui.ColorEdit4(labelName, ref colorToVect4, ImGuiColorEditFlags.AlphaBar) ? new Color(
-            colorToVect4.X,
-            colorToVect4.Y,
-            colorToVect4.Z,
-            colorToVect4.W
-        ) : inputColor;
+        return ImGui.ColorEdit4(labelName, ref colorToVect4, ImGuiColorEditFlags.AlphaBar)
+            ? new Color(colorToVect4.X, colorToVect4.Y, colorToVect4.Z, colorToVect4.W)
+            : inputColor;
     }
 
     public override Job Tick()
     {
+        _mercenaryEntity = null;
         InGameData = GameController.IngameState.Data;
-        var Player = GameController?.Player;
+        var player = GameController?.Player;
 
-        if (Player == null)
-        {
+        if (player == null)
             return null;
-        }
 
         if (InGameData != null)
+            PlayerPos = InGameData.ToWorldWithTerrainHeight(player.PosNum);
+
+        if (Settings.DoryaniMerc.DrawDoryanisOnMerc)
         {
-            PlayerPos = InGameData.ToWorldWithTerrainHeight(Player.PosNum);
+            if (!GameController.Player.TryGetComponent<Actor>(out var actorComp))
+                return null;
+
+            foreach (var deployedObject in actorComp.DeployedObjects)
+            {
+                if (deployedObject?.Entity is not { IsValid: true, IsAlive: true } entity)
+                    continue;
+
+                if (Regex.IsMatch(entity.Metadata, "^Metadata/Monsters/Mercenaries/") && entity.Buffs.Any(x => x.Name == "lightning_resistance_override"))
+                    _mercenaryEntity = entity;
+            }
         }
 
         return null;
@@ -102,27 +136,18 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
     public override void Render()
     {
         if (!Settings.Enable.Value || !GameController.InGame || InGameData == null || PlayerPos == Vector3N.Zero)
-        {
             return;
-        }
 
         var inGameUi = GameController.Game.IngameState.IngameUi;
 
-        if (Settings.DisableDrawOnLeftOrRightPanelsOpen &&
-            (inGameUi.OpenLeftPanel.IsVisible || inGameUi.OpenRightPanel.IsVisible))
-        {
+        if (Settings.DisableDrawOnLeftOrRightPanelsOpen && (inGameUi.OpenLeftPanel.IsVisible || inGameUi.OpenRightPanel.IsVisible))
             return;
-        }
 
         if (!Settings.IgnoreFullscreenPanels && inGameUi.FullscreenPanels.Any(x => x.IsVisible))
-        {
             return;
-        }
 
         if (!Settings.IgnoreLargePanels && inGameUi.LargePanels.Any(x => x.IsVisible))
-        {
             return;
-        }
 
         _rect = GameController.Window.GetWindowRectangle() with
         {
@@ -132,14 +157,10 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
         if (!Settings.DisableDrawRegionLimiting)
         {
             if (inGameUi.OpenRightPanel.IsVisible)
-            {
                 _rect.Right = inGameUi.OpenRightPanel.GetClientRectCache.Left;
-            }
 
             if (inGameUi.OpenLeftPanel.IsVisible)
-            {
                 _rect.Left = inGameUi.OpenLeftPanel.GetClientRectCache.Right;
-            }
         }
 
         ImGui.SetNextWindowSize(new Vector2N(_rect.Width, _rect.Height));
@@ -147,36 +168,56 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
 
         ImGui.Begin(
             "wherethecirclesat_drawregion",
-            ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoMove |
-            ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings |
-            ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoBackground
-        );
+            ImGuiWindowFlags.NoDecoration |
+            ImGuiWindowFlags.NoInputs |
+            ImGuiWindowFlags.NoMove |
+            ImGuiWindowFlags.NoScrollWithMouse |
+            ImGuiWindowFlags.NoSavedSettings |
+            ImGuiWindowFlags.NoFocusOnAppearing |
+            ImGuiWindowFlags.NoBringToFrontOnFocus |
+            ImGuiWindowFlags.NoBackground);
 
         _backGroundWindowPtr = ImGui.GetWindowDrawList();
+
+        if (_mercenaryEntity != null)
+        {
+            if (Settings.DoryaniMerc.Circle.World)
+            {
+                var colorToUse = inGameUi.Map.LargeMap.IsVisible && Settings.DoryaniMerc.Circle.EnableLargeMapColor
+                    ? Settings.DoryaniMerc.Circle.LargeMapColor
+                    : Settings.DoryaniMerc.Circle.GameWorldColor;
+
+                DrawData(
+                    colorToUse, Settings.DoryaniMerc.Circle.Size, Settings.DoryaniMerc.Circle.Thickness, Settings.DoryaniMerc.Circle.Segments,
+                    InGameData.ToWorldWithTerrainHeight(_mercenaryEntity.PosNum));
+            }
+
+            if (Settings.DoryaniMerc.Circle.LargeMap && inGameUi.Map.LargeMap.IsVisible)
+                Graphics.DrawCircleOnLargeMap(
+                    _mercenaryEntity.GridPosNum, false, Settings.DoryaniMerc.Circle.Size, Settings.DoryaniMerc.Circle.GameWorldColor,
+                    Settings.DoryaniMerc.Circle.Thickness, Settings.DoryaniMerc.Circle.Segments);
+        }
 
         foreach (var drawing in Settings.Circles)
         {
             if (drawing.World)
             {
-                var colorToUse = inGameUi.Map.LargeMap.IsVisible && drawing.EnableLargeMapColor
-                    ? drawing.LargeMapColor
-                    : drawing.GameWorldColor;
+                var colorToUse = inGameUi.Map.LargeMap.IsVisible && drawing.EnableLargeMapColor ? drawing.LargeMapColor : drawing.GameWorldColor;
 
-                DrawData(colorToUse, drawing.Size, drawing.Thickness, drawing.Segments);
+                DrawData(colorToUse, drawing.Size, drawing.Thickness, drawing.Segments, PlayerPos);
             }
 
             if (drawing.LargeMap && inGameUi.Map.LargeMap.IsVisible)
-            {
-                Graphics.DrawCircleOnLargeMap(GameController.Player.GridPosNum, false, drawing.Size, drawing.GameWorldColor, drawing.Thickness, drawing.Segments);
-            }
+                Graphics.DrawCircleOnLargeMap(
+                    GameController.Player.GridPosNum, false, drawing.Size, drawing.GameWorldColor, drawing.Thickness, drawing.Segments);
         }
 
         ImGui.End();
         return;
 
-        void DrawData(Color color, float size, int thickness, int segments)
+        void DrawData(Color color, float size, int thickness, int segments, Vector3N position)
         {
-            DrawCircleInWorld(PlayerPos, size * 10f, color, thickness, segments);
+            DrawCircleInWorld(position, size * 10f, color, thickness, segments);
         }
     }
 
@@ -193,8 +234,7 @@ public class WhereTheCirclesAt : BaseSettingsPlugin<WhereTheCirclesAtSettings>
         _backGroundWindowPtr.AddPolyline(ref points[0], points.Length, color.ToImgui(), drawFlags, thickness);
     }
 
-    private static Vector2N[] GetInWorldCirclePoints(Vector3N worldCenter, float radius, int segmentCount,
-        bool addFinalPoint)
+    private static Vector2N[] GetInWorldCirclePoints(Vector3N worldCenter, float radius, int segmentCount, bool addFinalPoint)
     {
         var circlePoints = new Vector2N[segmentCount + (addFinalPoint ? 1 : 0)];
         var segmentAngle = 2f * MathF.PI / segmentCount;
