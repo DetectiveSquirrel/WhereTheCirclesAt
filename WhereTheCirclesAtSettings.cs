@@ -24,12 +24,10 @@ public class WhereTheCirclesAtSettings : ISettings
         public int Thickness = 7;
         public int Segments = 40;
         public bool LargeMap = false;
-        public bool LargeMapFilledCircle = false;
         public bool LargeMapFollowTerrain = false;
         public bool EnableLargeMapColor = false;
         public Color LargeMapColor = Color.White;
         public bool World = true;
-        public bool WorldFilledCircle = false;
         public bool WorldFollowTerrain = false;
         public Color GameWorldColor = Color.White;
     }
